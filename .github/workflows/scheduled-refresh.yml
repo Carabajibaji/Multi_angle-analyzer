@@ -1,0 +1,82 @@
+# Automated daily data refresh.
+#
+# GitHub cron is UTC-only. Each job is listed at two UTC times so one of them always falls inside its
+# America/New_York window in both EST and EDT. The app itself decides (by ET calendar, NYSE holidays and
+# idempotent run keys) whether a job actually runs, so the duplicate trigger is a harmless no-op.
+#
+#   pre-market       Mon–Fri 11:05 & 12:05 UTC  (~6–8 am ET)
+#   post-market      Mon–Fri 21:35 & 22:35 UTC  (~4:35–6:35 pm ET)
+#   nightly-company  daily   02:15 & 03:15 UTC  (~9–11 pm ET)
+#   weekly-reconcile Sat     14:25 & 15:25 UTC  (~9–11 am ET)
+name: Scheduled data refresh
+
+on:
+  schedule:
+    - cron: "5 11 * * 1-5"
+    - cron: "5 12 * * 1-5"
+    - cron: "35 21 * * 1-5"
+    - cron: "35 22 * * 1-5"
+    - cron: "15 2 * * *"
+    - cron: "15 3 * * *"
+    - cron: "25 14 * * 6"
+    - cron: "25 15 * * 6"
+  workflow_dispatch:
+    inputs:
+      job:
+        description: "Job to run"
+        type: choice
+        options: [scheduled, pre-market, post-market, nightly-company, weekly-reconcile, all]
+        default: scheduled
+      force:
+        description: "Ignore schedule window / already-succeeded check (manual refresh)"
+        type: boolean
+        default: false
+
+# Never run two refreshes at once (the database lease lock is a second line of defence).
+concurrency:
+  group: data-refresh
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+      POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
+      POLYGON_DATA_NATURE: ${{ vars.POLYGON_DATA_NATURE || 'end_of_day' }}
+      POLYGON_REQUESTS_PER_MINUTE: ${{ vars.POLYGON_REQUESTS_PER_MINUTE || '5' }}
+      FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+      FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
+      TRACKED_TICKERS: ${{ vars.TRACKED_TICKERS }}
+      MARKET_EXTRA_CLOSURES: ${{ vars.MARKET_EXTRA_CLOSURES }}
+      CANDLE_HISTORY_YEARS: ${{ vars.CANDLE_HISTORY_YEARS || '5' }}
+      DATA_MODE: live
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Require a persistent database
+        run: |
+          case "$DATABASE_URL" in
+            postgres://*|postgresql://*) ;;
+            *) echo "::error::Set the DATABASE_URL repository secret to a hosted PostgreSQL URL (runners are ephemeral)."; exit 1 ;;
+          esac
+      - name: Apply migrations
+        run: npm run db:migrate
+      - name: Run jobs
+        run: npm run job -- "${{ inputs.job || 'scheduled' }}" ${{ inputs.force && '--force' || '' }} --trigger=${{ github.event_name == 'schedule' && 'schedule' || 'manual' }}
+      - name: Upload job logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: job-logs-${{ github.run_id }}
+          path: job-logs/
+          retention-days: 30

@@ -1,0 +1,25 @@
+{
+  "cik": "320193",
+  "entityType": "operating",
+  "sic": "3571",
+  "sicDescription": "Electronic Computers",
+  "name": "Fixture Computer Co",
+  "tickers": ["FIXC"],
+  "exchanges": ["Nasdaq"],
+  "fiscalYearEnd": "0927",
+  "stateOfIncorporation": "CA",
+  "filings": {
+    "recent": {
+      "accessionNumber": ["0000320193-26-000010", "0000320193-26-000009"],
+      "filingDate": ["2026-08-01", "2026-07-30"],
+      "reportDate": ["2026-06-27", "2026-07-30"],
+      "acceptanceDateTime": ["2026-08-01T16:30:12.000Z", "2026-07-30T16:31:00.000Z"],
+      "form": ["10-Q", "8-K"],
+      "primaryDocument": ["fixc-20260627.htm", "fixc-8k.htm"],
+      "primaryDocDescription": ["10-Q", "8-K"],
+      "items": ["", "2.02,9.01"],
+      "isXBRL": [1, 1]
+    },
+    "files": []
+  }
+}

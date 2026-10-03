@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - name: Check migrations match the schema
+        run: |
+          npx drizzle-kit generate --name ci_check
+          if [ -n "$(git status --porcelain drizzle)" ]; then echo "::error::Schema changed without a migration. Run npm run db:generate."; git status --porcelain drizzle; exit 1; fi
+      - run: npm run build
+        env:
+          DATABASE_URL: pglite:memory

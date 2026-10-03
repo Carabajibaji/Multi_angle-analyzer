@@ -1,0 +1,16 @@
+# Sample refresh-job logs (DEMO mode, local PGlite, 2026-10-03)
+# Real-provider runs look identical; DEMO rows are labelled data_nature='demo'.
+
+## 1. 'npm run job -- scheduled' on Saturday 2026-10-03 ~6:12 pm ET (gating in action)
+2026-10-03T22:12:08.576Z [nightly-company] Skipped: nightly job runs between 21:00 and 06:00 ET (after the SEC filing day ends)
+2026-10-03T22:12:08.602Z [weekly-reconcile] Started run #5 (key weekly-reconcile:2026-W40, trigger cli).
+2026-10-03T22:12:08.844Z [weekly-reconcile] FAILED sec:ticker-map: not_configured: SEC_USER_AGENT (with contact email) is not set
+2026-10-03T22:12:09.149Z [weekly-reconcile] Reconciliation: 0 securities with gaps, 0 inconsistent candles, 22 stale/failed datasets.
+2026-10-03T22:12:09.149Z [weekly-reconcile] Finished with status partial: 1 ok, 1 failed, 0 unchanged/skipped.
+2026-10-03T22:12:09.164Z [pre-market] Skipped: 2026-10-03 is not a U.S. trading day
+2026-10-03T22:12:09.165Z [post-market] Skipped: 2026-10-03 is not a U.S. trading day
+
+## 2. 'npm run job -- post-market --force' (run #4)
+2026-10-03T22:00:14.973Z [post-market] Started run #4 (key post-market:2026-10-02#cli-2026-10-03T22:00:14.971Z, trigger cli).
+2026-10-03T22:00:15.966Z [post-market] Stocks to Watch for 2026-10-02: 4 companies matched at least one rule.
+2026-10-03T22:00:15.966Z [post-market] Finished with status succeeded: 46 ok, 0 failed, 36 unchanged/skipped.
