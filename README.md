@@ -4,11 +4,13 @@ Beginner-friendly equity research. Its foundation is an **automated daily data p
 
 > Educational and informational purposes only. Not investment advice.
 
-**Status: Phase 2 (data foundation) complete.** Phase 3 (core product pages) is next. See [Roadmap](#roadmap).
+**Status: Phases 2 (data foundation) and 3 (core product) complete.** Phase 4 (grounded AI explanations) is next. See [Roadmap](#roadmap).
 
-| Today (demo data) | Data Status (admin) |
+| Today (demo data) | Technical analysis (demo data) |
 |---|---|
-| ![Today](docs/screenshots/today-desktop.png) | ![Status](docs/screenshots/status-desktop.png) |
+| ![Today](docs/screenshots/today-desktop.png) | ![Technical](docs/screenshots/company-technical.png) |
+| **Filing analyzer** | **Data Status (admin)** |
+| ![Filings](docs/screenshots/filings.png) | ![Status](docs/screenshots/status-desktop.png) |
 
 ## What works now
 
@@ -18,7 +20,23 @@ Beginner-friendly equity research. Its foundation is an **automated daily data p
 * **Deterministic calculations**: SMA, EMA, RSI, MACD and Bollinger Bands, recomputed only when candles change. SEC XBRL facts are normalized into annual and quarterly statements, then into financial-health metrics with stated formulas.
 * **Today dashboard**, built entirely from the DB: 60-second summary (rule-based, no AI), Market Snapshot, Sector Pulse vs SPY, rules-based Stocks to Watch with "Why am I seeing this?", Upcoming Catalysts (confirmed / scheduled / estimated) and provider news.
 * **Data Status admin page**: last attempted and successful run per job, next scheduled time, provider health, stale datasets, recent errors, run logs, the weekly reconciliation report, and manual refresh buttons.
-* **60 automated tests** (calendar/DST/holidays, indicators, fundamentals, HTTP retry/rate-limit/redaction, SEC parsing, full pipeline on an in-memory Postgres).
+* **Companies**: search any SEC-registered company (the SEC ticker directory is stored by the nightly/weekly jobs) and request on-demand analysis (rate-limited and capped). The unified company page has six tabs:
+  * **Overview**: price, 52-week range, derived market cap with its inputs, latest filing, next earnings.
+  * **Financial Health**: 3–5 year annual and recent quarterly statements with formulas and per-period filing links, transparent pass/watch/fail checks (no hidden score), a plain-English explainer, and a warning for banks and insurers.
+  * **Governance**: 8-K-based flags (auditor change, non-reliance, change in control, cyber incident, listing notice) plus an explicit list of what isn't extracted yet.
+  * **Competitive Landscape**: SIC-based peer suggestions with editable peers, a comparison table and valuation multiples, and moat evidence vs counterevidence.
+  * **Technical Analysis** and **Filings & Sources**.
+* **Technical Lab**: interactive candlestick chart (lightweight-charts) with volume, crosshair values, zoom/pan, 1M–Max ranges and fullscreen. Overlays: SMA, EMA, Bollinger, RSI and MACD panes, support/resistance, and W/M pattern markers with necklines. The **Triple Verification Filter** shows every rule, measured value and pass/fail.
+* **W/M pattern detection**: double bottoms and tops with neckline, status (forming/completed/invalidated), volume confirmation, a visible confidence breakdown and the invalidation level. Detected patterns are stored nightly and feed Stocks to Watch.
+* **Filing & document analyzer**: stored SEC filings are fetched from sec.gov archive URLs only, then cached. Pasted text and .txt/.htm uploads (≤ 1 MB, not stored) are also supported. It shows:
+  * document identification and item sections (10-K/10-Q)
+  * 11 risk flags with cited passages (negations excluded)
+  * reported facts vs management commentary
+  * prior-period comparison: new flags and new or reworded risk-factor paragraphs
+  * detection of instruction-like (prompt-injection) text, which is reported and never acted on
+* **Compare**: up to 8 companies side by side. **Watchlist**: saved in the browser.
+* **Jargon Buster**: 30 glossary terms (plain definition, why it matters, example, limitation), opened inline from underlined terms anywhere, plus a full Learn page explaining the Fact / Calculation / Interpretation / Risk / Unknown labels.
+* **84 automated tests**: calendar/DST/holidays, indicators, fundamentals, health/moat/governance rules, W/M patterns, triple verification, HTTP retry/rate-limit/redaction, SEC parsing, filing analyzer (including injection and SSRF guards), and the full pipeline and on-demand analysis on an in-memory Postgres.
 
 ## Quick start (local, no API keys)
 
@@ -90,7 +108,7 @@ Any Node 20+ host works: `npm run build && npm start`.
 
 ## Tests
 
-`npm test` runs 60 tests with no network access. Pipeline tests use fake providers on an in-memory PostgreSQL (PGlite) and cover:
+`npm test` runs 84 tests with no network access. Pipeline tests use fake providers on an in-memory PostgreSQL (PGlite) and cover:
 * successful refresh, idempotency, no duplicates
 * partial failure and provider errors that keep existing data, labelled stale
 * empty-response protection, lock contention and lease takeover
@@ -108,12 +126,15 @@ Calculation tests use hand-computed fixtures.
 * **Quarterly cash flow** is unavailable when issuers tag only year-to-date values. It is not derived by subtraction.
 * **Banks and insurers** often use tags outside the mapping, so their metrics show as unavailable rather than wrong.
 * **Sector Pulse** uses SPDR sector ETFs. Company-level GICS sectors are not yet assigned (SEC provides SIC codes only).
-* The login rate limiter is per server instance (in memory).
+* **Governance details** (board independence, CEO/chair split, committees, pay, ownership, dual-class) need proxy-statement extraction, which is not automated yet. The Governance tab says so instead of guessing.
+* **Peer suggestions** use SEC SIC codes, which are broad. Users can edit peers. Market share and customer concentration are not available.
+* **Filing analyzer** rules are deterministic heuristics (headings, keywords, negation handling). They point to passages to read; they don't replace reading the filing. PDF uploads aren't supported (only .txt/.htm/.html).
+* **Business descriptions** aren't shown on the Overview (they can be read via 10-K Item 1 in the analyzer).
+* **Rate limiters** (login, analysis, quotes) are per server instance (in memory). On-demand analysis is capped by `MAX_TRACKED_COMPANIES` (default 150) and `ANALYZE_PER_HOUR` per IP (default 5).
 
 ## Roadmap
 
-* **Phase 3:** company search and unified company page (overview, financial health UI with 3–5 year trends, governance from proxy filings, peers and moat evidence), Technical Lab (interactive candlesticks, W/M pattern detection, triple-verification filter), filing and document analyzer with prompt-injection-safe processing, user watchlists.
-* **Phase 4:** grounded AI explanations (schema-validated, cached by input hash, cites stored sources only), the four-part plain-English explainer, and the Jargon Buster glossary.
+* **Phase 4:** grounded AI explanations via the Anthropic API: a sourced "why it moved" layer for the Today page, filing summaries and news grouping. Each will be schema-validated, cached by input hash in `ai_summaries`, cite stored sources only, and wrap documents as untrusted data. Also: proxy-statement extraction for board and compensation data, and FOMC and other official calendars.
 * **Phase 5:** accessibility audit (axe), Playwright UX tests, performance budgets, dependency review.
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the audit, design, schema and integrity rules, and [`docs/sample-refresh-log.txt`](docs/sample-refresh-log.txt) for a real job log.

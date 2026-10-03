@@ -76,3 +76,21 @@ export function fmtTime(iso: string): string {
 export function Disclosure({ children }: { children: React.ReactNode }) {
   return <p className="tiny muted" style={{ marginTop: 8 }}>{children}</p>;
 }
+
+/** Compact money: 1.23B, 456.7M. Currency code is always shown. */
+export function fmtMoney(v: number | null | undefined, currency = "USD"): string {
+  if (v == null || !Number.isFinite(v)) return "n/a";
+  const abs = Math.abs(v);
+  const sign = v < 0 ? "−" : "";
+  const [n, u] = abs >= 1e12 ? [abs / 1e12, "T"] : abs >= 1e9 ? [abs / 1e9, "B"] : abs >= 1e6 ? [abs / 1e6, "M"] : abs >= 1e3 ? [abs / 1e3, "K"] : [abs, ""];
+  return `${sign}${n.toFixed(n >= 100 ? 0 : n >= 10 ? 1 : 2)}${u} ${currency}`;
+}
+
+export function fmtRatio(v: number | null | undefined, kind: "pct" | "x" = "pct", digits = 1): string {
+  if (v == null || !Number.isFinite(v)) return "n/a";
+  return kind === "pct" ? `${(v * 100).toFixed(digits)}%` : `${v.toFixed(2)}×`;
+}
+
+export function secFilingIndexUrl(cik: string, accessionNo: string): string {
+  return `https://www.sec.gov/Archives/edgar/data/${Number(cik)}/${accessionNo.replace(/-/g, "")}/${accessionNo}-index.htm`;
+}

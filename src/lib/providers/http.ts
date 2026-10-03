@@ -103,6 +103,44 @@ export class HttpClient {
   }
 
   async getJson<S extends z.ZodType>(spec: RequestSpec<S>): Promise<Fetched<z.infer<S>>> {
+    return this.request(spec, "application/json", (text, publicUrl, attempt) => {
+      let json: unknown;
+      try {
+        json = JSON.parse(text);
+      } catch (err) {
+        throw new ProviderError(this.o.provider, "validation", `Malformed JSON from ${publicUrl}`, { attempts: attempt, cause: err });
+      }
+      const parsed = spec.schema.safeParse(json);
+      if (!parsed.success) {
+        throw new ProviderError(
+          this.o.provider,
+          "validation",
+          `Unexpected response shape from ${publicUrl}: ${parsed.error.issues
+            .slice(0, 3)
+            .map((i) => `${i.path.join(".")}: ${i.message}`)
+            .join("; ")}`,
+          { attempts: attempt },
+        );
+      }
+      return { data: parsed.data as z.infer<S>, raw: text.length <= this.o.maxRawChars ? json : undefined };
+    });
+  }
+
+  /** Fetch a text/HTML document (e.g. an SEC filing), rejecting bodies larger than `maxChars`. */
+  async getText(spec: Omit<RequestSpec<z.ZodType>, "schema"> & { maxChars?: number }): Promise<Fetched<string>> {
+    const max = spec.maxChars ?? 15_000_000;
+    return this.request({ ...spec, schema: undefined as never }, "text/html,text/plain;q=0.9,*/*;q=0.5", (text, publicUrl, attempt) => {
+      if (text.length > max) throw new ProviderError(this.o.provider, "validation", `Document too large (${text.length} chars) at ${publicUrl}`, { attempts: attempt });
+      if (!text.trim()) throw new ProviderError(this.o.provider, "empty", `Empty document at ${publicUrl}`, { attempts: attempt });
+      return { data: text, raw: undefined };
+    });
+  }
+
+  private async request<T>(
+    spec: RequestSpec<z.ZodType>,
+    accept: string,
+    parse: (text: string, publicUrl: string, attempt: number) => { data: T; raw: unknown },
+  ): Promise<Fetched<T>> {
     const provider = this.o.provider;
     const publicUrl = this.publicUrl(spec.path, spec.query, spec.baseUrl);
     let lastError: ProviderError | undefined;
@@ -116,8 +154,9 @@ export class HttpClient {
         let res: Response;
         try {
           res = await this.o.fetchImpl(this.requestUrl(spec), {
-            headers: { Accept: "application/json", ...this.o.headers },
+            headers: { Accept: accept, ...this.o.headers },
             signal: controller.signal,
+            redirect: "error",
           });
         } catch (err) {
           const aborted = controller.signal.aborted;
@@ -141,28 +180,10 @@ export class HttpClient {
           });
         }
 
-        let json: unknown;
-        try {
-          json = JSON.parse(text);
-        } catch (err) {
-          throw new ProviderError(provider, "validation", `Malformed JSON from ${publicUrl}`, { attempts: attempt, cause: err });
-        }
-        const parsed = spec.schema.safeParse(json);
-        if (!parsed.success) {
-          throw new ProviderError(
-            provider,
-            "validation",
-            `Unexpected response shape from ${publicUrl}: ${parsed.error.issues
-              .slice(0, 3)
-              .map((i) => `${i.path.join(".")}: ${i.message}`)
-              .join("; ")}`,
-            { attempts: attempt },
-          );
-        }
-
+        const { data, raw } = parse(text, publicUrl, attempt);
         this.o.observer?.onSuccess?.(provider);
         return {
-          data: parsed.data,
+          data,
           source: {
             provider,
             name: spec.sourceName,
@@ -170,7 +191,7 @@ export class HttpClient {
             retrievedAt: new Date(this.o.now()),
             contentHash: fingerprint(text),
             httpStatus: res.status,
-            raw: text.length <= this.o.maxRawChars ? json : undefined,
+            raw,
           },
         };
       } catch (err) {

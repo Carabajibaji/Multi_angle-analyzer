@@ -1,12 +1,11 @@
 import { desc, eq, gte, sql } from "drizzle-orm";
 import type { Db } from "../db/client";
 import { datasets, jobFailures, jobRuns, providerHealth, analysisReports } from "../db/schema";
-import { JOBS, JOB_SCHEDULE_DESCRIPTION, nextCronFire } from "../jobs/definitions";
-import type { JobName } from "../jobs/runner";
+import { JOBS, JOB_SCHEDULE_DESCRIPTION, nextCronFire, type ScheduledJobName } from "../jobs/definitions";
 import { evaluateFreshness } from "../pipeline/freshness";
 
 export async function getStatus(db: Db, now: Date) {
-  const jobNames = Object.keys(JOBS) as JobName[];
+  const jobNames = Object.keys(JOBS) as ScheduledJobName[];
   const jobs = await Promise.all(
     jobNames.map(async (name) => {
       const [lastAttempt] = await db.select().from(jobRuns).where(eq(jobRuns.jobName, name)).orderBy(desc(jobRuns.startedAt)).limit(1);

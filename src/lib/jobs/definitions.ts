@@ -5,15 +5,15 @@
  * and `shouldRun` + the idempotent run key make sure exactly one of them does the work.
  */
 import { and, desc, eq, gte, isNotNull, lt, sql } from "drizzle-orm";
-import { BENCHMARK_ETFS, SECTOR_ETFS, trackedStockTickers } from "../../config/universe";
+import { BENCHMARK_ETFS, SECTOR_ETFS } from "../../config/universe";
 import { analysisReports, companies, datasets, jobFailures, jobRuns, priceCandles, securities } from "../db/schema";
 import { fingerprint } from "../hash";
 import { evaluateFreshness } from "../pipeline/freshness";
-import { linkTrackedCompanies, refreshCompany } from "../pipeline/company";
+import { linkTrackedCompanies, refreshCompany, syncCompanyTracking, syncTickerDirectory } from "../pipeline/company";
 import { pruneNews, refreshCompanyNews, refreshEarningsCalendar, refreshMacroCalendar, refreshMarketNews } from "../pipeline/events";
 import { computeSectorPulse, ensureUniverse, refreshCandles, refreshIndicators, refreshSnapshots } from "../pipeline/market";
 import { buildStocksToWatch } from "../pipeline/watchlist";
-import { recordSource } from "../pipeline/store";
+import { getDataset, recordSource } from "../pipeline/store";
 import { addDays, closeMinutes, isTradingDay, isoWeekKey, lastCompletedSession, previousTradingDay, toEt } from "../time/marketCalendar";
 import type { JobContext, JobDefinition, JobName } from "./runner";
 
@@ -39,7 +39,7 @@ export const preMarketJob: JobDefinition = {
       await ctx.item(`candles:${sec.ticker}`, () => refreshCandles(ctx, sec, prevSession));
     }
     await refreshSnapshots(ctx);
-    const tracked = trackedStockTickers();
+    const tracked = all.filter((s) => s.assetType === "stock").map((s) => s.ticker);
     await ctx.item("events:earnings", () => refreshEarningsCalendar(ctx, tracked));
     await refreshMacroCalendar(ctx);
     await ctx.item("news:market", () => refreshMarketNews(ctx));
@@ -92,7 +92,17 @@ export const nightlyCompanyJob: JobDefinition = {
   },
   async execute(ctx) {
     await ensureUniverse(ctx);
+    const directory = await getDataset(ctx.db, "reference:sec-tickers");
+    if (!directory?.lastSuccessAt) {
+      await ctx.item("sec:ticker-directory", async () => {
+        const res = await ctx.providers.sec.getTickerMap();
+        await recordSource(ctx.db, res.source);
+        await syncTickerDirectory(ctx, res.data);
+        ctx.ok();
+      });
+    }
     const linked = await ctx.item("sec:link-companies", () => linkTrackedCompanies(ctx));
+    await syncCompanyTracking(ctx);
     const list = await ctx.db.select().from(companies).where(and(eq(companies.tracked, true), isNotNull(companies.cik)));
     let newFilings = 0;
     let refreshed = 0;
@@ -137,7 +147,11 @@ export const weeklyReconcileJob: JobDefinition = {
       ctx.ok();
       return res.data;
     });
-    if (tickerMap) await ctx.item("sec:link-companies", () => linkTrackedCompanies(ctx, tickerMap));
+    if (tickerMap) {
+      await ctx.item("sec:ticker-directory", () => syncTickerDirectory(ctx, tickerMap));
+      await ctx.item("sec:link-companies", () => linkTrackedCompanies(ctx, tickerMap));
+      await syncCompanyTracking(ctx);
+    }
 
     // 2. Candle gaps over the last year → backfill.
     const gaps: Array<{ ticker: string; missing: number; sample: string[] }> = [];
@@ -217,14 +231,46 @@ export const weeklyReconcileJob: JobDefinition = {
   },
 };
 
-export const JOBS: Record<JobName, JobDefinition> = {
+/**
+ * On-demand analysis of one company (user request): mark tracked, then load filings, fundamentals,
+ * candles and indicators immediately instead of waiting for the next scheduled run.
+ */
+export function onDemandJob(ticker: string): JobDefinition {
+  return {
+    name: "on-demand",
+    description: `On-demand analysis for ${ticker}`,
+    lockTtlMs: 15 * 60_000,
+    lockKey: `on-demand:${ticker}`,
+    runKey: (now) => `on-demand:${ticker}:${toEt(now).date}`,
+    shouldRun: () => ({ run: true, reason: "user request" }),
+    async execute(ctx) {
+      const [sec] = await ctx.db.update(securities).set({ tracked: true }).where(eq(securities.ticker, ticker)).returning();
+      if (!sec) throw new Error(`Unknown ticker ${ticker}`);
+      await syncCompanyTracking(ctx);
+      await ctx.item("sec:link-companies", () => linkTrackedCompanies(ctx));
+      const [fresh] = await ctx.db.select().from(securities).where(eq(securities.id, sec.id));
+      if (fresh?.companyId) {
+        const [company] = await ctx.db.select().from(companies).where(eq(companies.id, fresh.companyId));
+        if (company?.cik) await ctx.item(`company:${company.cik}`, async () => { await refreshCompany(ctx, company); ctx.ok(); });
+      }
+      const session = lastCompletedSession(ctx.now);
+      await ctx.item(`candles:${ticker}`, () => refreshCandles(ctx, fresh ?? sec, session));
+      await ctx.item(`indicators:${ticker}`, () => refreshIndicators(ctx, fresh ?? sec));
+      return { ticker, session };
+    },
+  };
+}
+
+export type ScheduledJobName = Exclude<JobName, "on-demand">;
+
+export const JOBS: Record<ScheduledJobName, JobDefinition> = {
   "pre-market": preMarketJob,
   "post-market": postMarketJob,
   "nightly-company": nightlyCompanyJob,
   "weekly-reconcile": weeklyReconcileJob,
 };
 
-export const JOB_SCHEDULE_DESCRIPTION: Record<JobName, string> = {
+export const JOB_SCHEDULE_DESCRIPTION: Record<ScheduledJobName, string> = {
   "pre-market": "U.S. trading days, ~7:00–8:00 ET (cron 11:05 & 12:05 UTC, Mon–Fri)",
   "post-market": "U.S. trading days, ~5:30–6:30 pm ET (cron 21:35 & 22:35 UTC, Mon–Fri)",
   "nightly-company": "Every night, ~10–11 pm ET (cron 02:15 & 03:15 UTC)",
@@ -232,14 +278,14 @@ export const JOB_SCHEDULE_DESCRIPTION: Record<JobName, string> = {
 };
 
 /** Next time a cron pattern in the workflow will fire (for the status page). Matches .github/workflows/scheduled-refresh.yml. */
-export const CRON_UTC: Record<JobName, Array<{ minute: number; hour: number; days: number[] }>> = {
+export const CRON_UTC: Record<ScheduledJobName, Array<{ minute: number; hour: number; days: number[] }>> = {
   "pre-market": [11, 12].map((hour) => ({ minute: 5, hour, days: [1, 2, 3, 4, 5] })),
   "post-market": [21, 22].map((hour) => ({ minute: 35, hour, days: [1, 2, 3, 4, 5] })),
   "nightly-company": [2, 3].map((hour) => ({ minute: 15, hour, days: [0, 1, 2, 3, 4, 5, 6] })),
   "weekly-reconcile": [14, 15].map((hour) => ({ minute: 25, hour, days: [6] })),
 };
 
-export function nextCronFire(job: JobName, now: Date): Date {
+export function nextCronFire(job: ScheduledJobName, now: Date): Date {
   let best: Date | null = null;
   for (const c of CRON_UTC[job]) {
     for (let i = 0; i < 8; i++) {

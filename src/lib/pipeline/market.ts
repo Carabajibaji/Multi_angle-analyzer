@@ -3,9 +3,11 @@
  */
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { BENCHMARK_ETFS, SECTOR_ETFS, SNAPSHOT_INSTRUMENTS, trackedStockTickers } from "../../config/universe";
-import { analysisReports, marketSnapshots, priceCandles, securities, technicalIndicators } from "../db/schema";
+import { analysisReports, marketSnapshots, patternDetections, priceCandles, securities, technicalIndicators } from "../db/schema";
 import { fingerprint } from "../hash";
 import { computeIndicatorSnapshots } from "../indicators";
+import { detectDoublePatterns } from "../technical/patterns";
+import { tripleVerification } from "../technical/verification";
 import { ProviderError } from "../providers/errors";
 import type { Candle } from "../providers/types";
 import type { JobContext } from "../jobs/runner";
@@ -255,7 +257,15 @@ export async function refreshIndicators(ctx: JobContext, sec: Security): Promise
     await markSuccess(ctx.db, key, ctx.now, { changed: false, dataAsOf: last.date });
     return false;
   }
-  const snaps = computeIndicatorSnapshots(candles);
+  const bars = candles.map((c) => ({ date: c.date, open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume }));
+  const snaps = [
+    ...computeIndicatorSnapshots(candles),
+    ...(["bullish", "bearish"] as const).map((dir) => {
+      const r = tripleVerification(bars, dir);
+      return { key: `triple_${dir}`, params: { rulesVersion: 1 }, values: { passed: r.passedCount, label: r.label, checks: r.checks } as unknown as Record<string, number | null> };
+    }),
+  ];
+  const patterns = detectDoublePatterns(bars);
   await ctx.db.transaction(async (tx) => {
     for (const s of snaps) {
       const row = { securityId: sec.id, interval: "1d", indicatorKey: s.key, asOfDate: last.date, params: s.params, values: s.values, inputHash, calculatedAt: new Date() };
@@ -263,6 +273,23 @@ export async function refreshIndicators(ctx: JobContext, sec: Security): Promise
         .insert(technicalIndicators)
         .values(row)
         .onConflictDoUpdate({ target: [technicalIndicators.securityId, technicalIndicators.interval, technicalIndicators.indicatorKey, technicalIndicators.asOfDate], set: row });
+    }
+    for (const p of patterns) {
+      const row = {
+        securityId: sec.id,
+        pattern: p.pattern,
+        pointsKey: `${p.first.date}|${p.middle.date}|${p.second.date}`,
+        points: { first: p.first, middle: p.middle, second: p.second, resolvedAt: p.resolvedAt, measuredTarget: p.measuredTarget, confidenceBreakdown: p.confidenceBreakdown, explanation: p.explanation },
+        neckline: p.neckline,
+        detectedOn: p.detectedOn,
+        status: p.status,
+        confidence: p.confidence,
+        volumeConfirmed: p.volumeConfirmed,
+        invalidationLevel: p.invalidationLevel,
+        inputHash,
+        calculatedAt: new Date(),
+      };
+      await tx.insert(patternDetections).values(row).onConflictDoUpdate({ target: [patternDetections.securityId, patternDetections.pattern, patternDetections.pointsKey], set: row });
     }
   });
   await markSuccess(ctx.db, key, ctx.now, { changed: true, dataAsOf: last.date, recordCount: snaps.length });

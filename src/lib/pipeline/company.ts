@@ -57,6 +57,49 @@ export function needsFundamentalsRefresh(newFilings: FilingRecord[]): boolean {
   return newFilings.some((f) => PERIODIC_FORMS.has(f.form) || (f.form.startsWith("8-K") && f.items.includes("2.02")));
 }
 
+/**
+ * Store the full SEC ticker list (untracked) so users can search any SEC-registered company.
+ * Untracked companies have no data until someone requests analysis or an admin tracks them.
+ */
+export async function syncTickerDirectory(ctx: JobContext, map: TickerMapEntry[]): Promise<number> {
+  const key = "reference:sec-tickers";
+  await markAttempt(ctx.db, { key, kind: "reference", provider: "sec_edgar", staleAfterSeconds: STALE_AFTER.reference }, ctx.now);
+  const byCik = new Map<string, TickerMapEntry>();
+  for (const e of map) if (!byCik.has(e.cik)) byCik.set(e.cik, e);
+  const cos = [...byCik.values()];
+  await ctx.db.transaction(async (tx) => {
+    for (let i = 0; i < cos.length; i += 500) {
+      await tx
+        .insert(companies)
+        .values(cos.slice(i, i + 500).map((e) => ({ cik: e.cik, name: e.title })))
+        .onConflictDoNothing();
+    }
+    const ids = new Map((await tx.select({ id: companies.id, cik: companies.cik }).from(companies)).map((c) => [c.cik, c.id]));
+    for (let i = 0; i < map.length; i += 500) {
+      await tx
+        .insert(securities)
+        .values(map.slice(i, i + 500).map((e) => ({ ticker: e.ticker, name: e.title, assetType: "stock", companyId: ids.get(e.cik) ?? null })))
+        .onConflictDoNothing();
+    }
+    // Attach existing (e.g. config-created) securities that were not yet linked.
+    const byTicker = new Map(map.map((e) => [e.ticker, e]));
+    const unlinked = await tx.select({ id: securities.id, ticker: securities.ticker }).from(securities).where(and(isNull(securities.companyId), eq(securities.assetType, "stock")));
+    for (const u of unlinked) {
+      const e = byTicker.get(u.ticker);
+      const cid = e ? ids.get(e.cik) : undefined;
+      if (cid) await tx.update(securities).set({ companyId: cid, name: e!.title }).where(eq(securities.id, u.id));
+    }
+  });
+  await markSuccess(ctx.db, key, ctx.now, { changed: true, dataAsOf: ctx.now.toISOString().slice(0, 10), recordCount: map.length });
+  ctx.log(`SEC ticker directory: ${map.length} tickers, ${cos.length} companies.`);
+  return map.length;
+}
+
+/** A company is tracked whenever one of its securities is tracked. */
+export async function syncCompanyTracking(ctx: Pick<JobContext, "db">): Promise<void> {
+  await ctx.db.execute(sql`UPDATE companies SET tracked = true WHERE tracked = false AND id IN (SELECT company_id FROM securities WHERE tracked = true AND company_id IS NOT NULL)`);
+}
+
 /** Attach tracked stock securities to SEC companies (by CIK), creating company rows as needed. */
 export async function linkTrackedCompanies(ctx: JobContext, tickerMap?: TickerMapEntry[]): Promise<number> {
   const unlinked = await ctx.db

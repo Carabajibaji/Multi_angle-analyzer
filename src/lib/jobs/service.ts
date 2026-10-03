@@ -4,12 +4,12 @@
 import type { Db } from "../db/client";
 import { HealthTracker } from "../pipeline/store";
 import { createProviders, type DataMode } from "../providers/registry";
-import { JOBS } from "./definitions";
-import { reapAbandonedRuns, runJob, type JobName, type JobResult, type Trigger } from "./runner";
+import { JOBS, onDemandJob, type ScheduledJobName } from "./definitions";
+import { reapAbandonedRuns, runJob, type JobResult, type Trigger } from "./runner";
 
-export const JOB_ORDER: JobName[] = ["nightly-company", "weekly-reconcile", "pre-market", "post-market"];
+export const JOB_ORDER: ScheduledJobName[] = ["nightly-company", "weekly-reconcile", "pre-market", "post-market"];
 
-export function isJobName(x: string): x is JobName {
+export function isJobName(x: string): x is ScheduledJobName {
   return x in JOBS;
 }
 
@@ -30,9 +30,14 @@ function providersFor(opts: ServiceOptions, health: HealthTracker) {
   return providers;
 }
 
-export async function runOne(name: JobName, opts: ServiceOptions): Promise<JobResult> {
+export async function runOne(name: ScheduledJobName, opts: ServiceOptions): Promise<JobResult> {
   const health = new HealthTracker();
   return runJob(JOBS[name], { db: opts.db, providers: providersFor(opts, health), health, trigger: opts.trigger, force: opts.force, now: opts.now, echo: opts.echo });
+}
+
+export async function runOnDemand(ticker: string, opts: ServiceOptions): Promise<JobResult> {
+  const health = new HealthTracker();
+  return runJob(onDemandJob(ticker), { db: opts.db, providers: providersFor(opts, health), health, trigger: "manual", force: true, now: opts.now });
 }
 
 /** Evaluate every job against the clock; each runs only inside its window and only once per run key. */

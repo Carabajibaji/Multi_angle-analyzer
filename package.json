@@ -5,7 +5,9 @@
   "description": "Multi-Angle Market Technical Analyzer: beginner-friendly equity research with an automated, source-tracked daily data pipeline. Educational only; not investment advice.",
   "license": "UNLICENSED",
   "type": "module",
-  "engines": { "node": ">=20.9" },
+  "engines": {
+    "node": ">=20.9"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -21,6 +23,7 @@
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",
     "drizzle-orm": "^0.45.3",
+    "lightweight-charts": "^5.2.1",
     "next": "^16.3.8",
     "pg": "^8.23.1",
     "react": "^19.3.0",

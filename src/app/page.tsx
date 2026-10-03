@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Change, Disclosure, FreshnessBadge, fmtNum, fmtTime, NatureBadge, SourceLine, Unavailable } from "@/components/data";
 import { getDb } from "@/lib/db/client";
 import { datasetFreshness, fmtPct, getLatestNews, getSectorPulse, getSnapshotCards, getStocksToWatch, getUpcomingEvents, sixtySecondSummary } from "@/lib/queries/dashboard";
@@ -116,7 +117,7 @@ export default async function TodayPage() {
                     <div className="tiny muted num">
                       5d {fmtPct(s.change5d)} · vs SPY {fmtPct(s.relative1d)}
                     </div>
-                    <div className="tiny muted">via {s.ticker}</div>
+                    <div className="tiny muted">via <Link href={`/technical-lab?ticker=${s.ticker}`}>{s.ticker}</Link></div>
                   </div>
                 );
               })}
@@ -138,7 +139,7 @@ export default async function TodayPage() {
             <ul className="plain">
               {watch.items.map((i) => (
                 <li key={i.ticker}>
-                  <strong>{i.ticker}</strong> <span className="small muted">{i.name}</span> <span className="badge label">{i.labelText}</span>
+                  <Link href={`/companies/${encodeURIComponent(i.ticker)}`}><strong>{i.ticker}</strong></Link> <span className="small muted">{i.name}</span> <span className="badge label">{i.labelText}</span>
                   <details>
                     <summary className="small">Why am I seeing this?</summary>
                     <ul className="small">

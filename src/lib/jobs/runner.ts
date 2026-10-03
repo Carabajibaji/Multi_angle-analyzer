@@ -15,7 +15,7 @@ import { ProviderError, redactSecrets, toProviderError } from "../providers/erro
 import type { Providers } from "../providers/registry";
 import { HealthTracker } from "../pipeline/store";
 
-export type JobName = "pre-market" | "post-market" | "nightly-company" | "weekly-reconcile";
+export type JobName = "pre-market" | "post-market" | "nightly-company" | "weekly-reconcile" | "on-demand";
 export type Trigger = "schedule" | "manual" | "cli";
 
 export interface JobContext {
@@ -41,6 +41,8 @@ export interface JobDefinition {
   /** Whether a scheduled trigger at `now` should do work (trading day, time window...). */
   shouldRun(now: Date): { run: boolean; reason: string };
   lockTtlMs: number;
+  /** Lock name; defaults to the job name. On-demand jobs lock per ticker. */
+  lockKey?: string;
   execute(ctx: JobContext): Promise<Record<string, unknown>>;
 }
 
@@ -120,7 +122,7 @@ export async function runJob(def: JobDefinition, opts: RunOptions): Promise<JobR
     }
   }
 
-  if (!(await acquireLock(opts.db, def.name, holder, def.lockTtlMs, now))) {
+  if (!(await acquireLock(opts.db, def.lockKey ?? def.name, holder, def.lockTtlMs, now))) {
     log("Skipped: another instance of this job holds the lock.");
     return result({ status: "skipped", reason: "locked", itemsOk: 0, itemsFailed: 0, itemsSkipped: 0 });
   }
@@ -195,7 +197,7 @@ export async function runJob(def: JobDefinition, opts: RunOptions): Promise<JobR
     .update(jobRuns)
     .set({ status, finishedAt: new Date(), itemsOk, itemsFailed, itemsSkipped, summary: summary ?? null, log: logText, error })
     .where(eq(jobRuns.id, runId));
-  await releaseLock(opts.db, def.name, holder);
+  await releaseLock(opts.db, def.lockKey ?? def.name, holder);
 
   return result({ status, runId, itemsOk, itemsFailed, itemsSkipped, summary });
 }

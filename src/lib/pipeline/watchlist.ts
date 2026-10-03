@@ -3,7 +3,7 @@
  * measured values. Labels are neutral research prompts, never buy/sell calls.
  */
 import { and, eq, gte, inArray, lte } from "drizzle-orm";
-import { filings, marketEvents, securities, technicalIndicators, watchlistItems, watchlists } from "../db/schema";
+import { filings, marketEvents, patternDetections, securities, technicalIndicators, watchlistItems, watchlists } from "../db/schema";
 import type { JobContext } from "../jobs/runner";
 import { addDays } from "../time/marketCalendar";
 import { loadCandles } from "./market";
@@ -44,6 +44,8 @@ export interface WatchInputs {
   sma200: number | null;
   upcomingEarnings: string | null;
   recentFilings: string[];
+  /** Possible W/M patterns completed in the latest session: "double_bottom" | "double_top" with detail. */
+  completedPatterns?: Array<{ pattern: string; detail: string }>;
 }
 
 export function evaluateWatchRules(i: WatchInputs): { hits: RuleHit[]; label: WatchLabel | null } {
@@ -62,11 +64,13 @@ export function evaluateWatchRules(i: WatchInputs): { hits: RuleHit[]; label: Wa
   }
   if (i.upcomingEarnings) hits.push({ rule: "upcoming_earnings", detail: `Earnings expected ${i.upcomingEarnings}` });
   for (const f of i.recentFilings) hits.push({ rule: "new_filing", detail: `New SEC filing: ${f}` });
+  for (const p of i.completedPatterns ?? []) hits.push({ rule: p.pattern === "double_bottom" ? "w_breakout" : "m_breakdown", detail: p.detail });
 
   if (hits.length === 0) return { hits, label: null };
   const has = (r: string) => hits.some((h) => h.rule === r);
   let label: WatchLabel = "worth_researching";
-  if (has("trend_weakness") || has("rsi_low")) label = "risk_flag";
+  if (has("trend_weakness") || has("rsi_low") || has("m_breakdown")) label = "risk_flag";
+  else if (has("w_breakout") && !has("rsi_high")) label = "positive_unconfirmed";
   else if (has("trend_strength") && !has("rsi_high")) label = "positive_unconfirmed";
   else if (has("trend_strength") && has("rsi_high")) label = "mixed_evidence";
   else if (has("large_price_move") || has("unusual_volume")) label = "elevated_volatility";
@@ -104,7 +108,15 @@ export async function buildStocksToWatch(ctx: JobContext, sessionDate: string): 
           .from(filings)
           .where(and(eq(filings.companyId, s.companyId), gte(filings.filedAt, addDays(sessionDate, -RULES.filingWithinDays)), inArray(filings.form, ["10-K", "10-Q", "8-K", "10-K/A", "10-Q/A", "8-K/A"])))
       : [];
+    const pats = await ctx.db
+      .select()
+      .from(patternDetections)
+      .where(and(eq(patternDetections.securityId, s.id), eq(patternDetections.status, "completed"), eq(patternDetections.detectedOn, sessionDate)));
+    const completedPatterns = pats
+      .filter((p) => (p.points as { resolvedAt?: { date: string } }).resolvedAt?.date === sessionDate)
+      .map((p) => ({ pattern: p.pattern, detail: `Possible ${p.pattern === "double_bottom" ? "W (double bottom)" : "M (double top)"} completed this session${p.volumeConfirmed ? " on above-average volume" : ""}; confidence ${Math.round((p.confidence ?? 0) * 100)}%` }));
     const { hits, label } = evaluateWatchRules({
+      completedPatterns,
       change1dPct: prev ? (last.close / prev.close - 1) * 100 : null,
       volumeRatio: get("volume_avg_20", "ratio"),
       rsi: get("rsi_14"),

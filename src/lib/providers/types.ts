@@ -119,6 +119,8 @@ export interface FilingRecord {
 export interface SecFilingsProvider extends ProviderInfo {
   getTickerMap(): Promise<Fetched<TickerMapEntry[]>>;
   getSubmissions(cik: string): Promise<Fetched<CompanySubmissions>>;
+  /** Fetch an SEC EDGAR archive document (HTML/text). */
+  getDocument(url: string): Promise<Fetched<string>>;
 }
 
 export interface XbrlFact {

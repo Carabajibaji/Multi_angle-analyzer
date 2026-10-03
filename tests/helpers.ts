@@ -73,6 +73,12 @@ export class FakeSec {
       source: src(`subs-${cik}`, JSON.stringify(this.filingsByCik.get(cik))),
     };
   }
+  documents = new Map<string, string>();
+  async getDocument(url: string): Promise<Fetched<string>> {
+    const doc = this.documents.get(url);
+    if (!doc) throw new ProviderError("sec_edgar", "not_found", `no fixture for ${url}`);
+    return { data: doc, source: src(`doc-${url}`) };
+  }
   async getCompanyFacts(): Promise<Fetched<XbrlFact[]>> {
     this.factCalls++;
     return { data: this.facts, source: src("facts", String(this.factCalls)) };

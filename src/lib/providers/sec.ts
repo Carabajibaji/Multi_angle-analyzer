@@ -147,6 +147,19 @@ export class SecEdgarProvider implements SecFilingsProvider, FundamentalsProvide
     };
   }
 
+  /**
+   * Fetch a filing document. Only https://www.sec.gov/Archives/edgar/data/... URLs are allowed
+   * (no user-controlled hosts, so no server-side request forgery).
+   */
+  async getDocument(url: string): Promise<Fetched<string>> {
+    this.ensure();
+    const u = new URL(url);
+    if (u.protocol !== "https:" || u.hostname !== "www.sec.gov" || !u.pathname.startsWith("/Archives/edgar/data/")) {
+      throw new ProviderError(this.id, "client", "Only SEC EDGAR archive documents can be fetched");
+    }
+    return this.http.getText({ baseUrl: "https://www.sec.gov", path: u.pathname, sourceName: "SEC EDGAR filing document" });
+  }
+
   async getCompanyFacts(cik: string, tags?: ReadonlySet<string>): Promise<Fetched<XbrlFact[]>> {
     this.ensure();
     const padded = padCik(cik);

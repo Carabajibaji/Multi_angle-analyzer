@@ -94,3 +94,19 @@ GitHub Actions cron (UTC, 2 slots per job)            Admin "Refresh" button / e
 * Only http(s) news links are accepted and rendered with `rel="noopener noreferrer nofollow"`. Provider URLs are fixed per adapter (no user-supplied fetch targets, so no SSRF surface).
 * All SQL goes through Drizzle's parameterized builder.
 * `npm audit` reports 4 moderate advisories, all in `drizzle-kit`'s dev-only esbuild dependency (not shipped to production).
+
+## 8. Phase 3 product layer
+
+| Area | Code | Notes |
+|---|---|---|
+| Company directory & search | `pipeline/company.ts#syncTickerDirectory`, `queries/company.ts#searchCompanies` | SEC ticker list stored untracked; LIKE wildcards escaped |
+| On-demand analysis | `jobs/definitions.ts#onDemandJob`, `api/companies/[ticker]/analyze` | per-ticker lock, same-origin, per-IP rate limit, tracked-company cap |
+| Financial health | `analysis/health.ts`, `analysis/explain.ts` | pass/watch/fail/unknown with stated thresholds; no composite score |
+| Moat evidence | `analysis/moat.ts` | evidence + counterevidence; qualitative categories marked "No reliable evidence found" |
+| Governance flags | `analysis/governance.ts` | 8-K items only; never framed as misconduct |
+| Technical | `technical/pivots.ts`, `patterns.ts`, `levels.ts`, `verification.ts` | stored nightly in `pattern_detections` and `technical_indicators` (`triple_bullish`, `triple_bearish`) |
+| Chart | `components/PriceChart.tsx` | indicators computed server-side; client only draws; hollow/filled candles so direction isn't colour-only |
+| Filing analyzer | `filings/analyzer.ts`, `filings/service.ts` | sec.gov archive URLs only (SSRF guard), `redirect: "error"`, 15 MB fetch cap, 1 MB upload cap, text cached in `filing_sections` |
+| Glossary | `content/glossary.ts`, `components/Term.tsx` | keyboard-accessible popover, Esc/outside click closes |
+
+**Prompt-injection posture.** Documents are only ever parsed by regular expressions. Instruction-like phrases are detected and shown to the user as a warning. When the AI layer is added, document text will be passed inside a delimited, explicitly untrusted data block, with no tool access.

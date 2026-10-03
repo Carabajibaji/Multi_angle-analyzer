@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
-import { Planned } from "@/components/Planned";
+import { WatchlistClient } from "./WatchlistClient";
 
 export const metadata: Metadata = { title: "Watchlist" };
 
-export default function Page() {
+export default function WatchlistPage() {
   return (
-    <Planned title="Watchlist" phase="Phase 3 (personal watchlists)">
-      <p>Save companies to your own watchlist. The system's rules-based Stocks to Watch list is already built daily and shown on the Today page.</p>
-    </Planned>
+    <>
+      <h1>Your watchlist</h1>
+      <p className="lede">Saved in this browser only (no account needed). Prices are the latest stored daily closes from the automated pipeline.</p>
+      <WatchlistClient />
+    </>
   );
 }
