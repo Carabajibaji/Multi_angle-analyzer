@@ -2,6 +2,7 @@
  * Finnhub adapter: market news, company news and the earnings calendar.
  * https://finnhub.io/docs/api
  */
+import { envSecret } from "../env";
 import { z } from "zod";
 import { ProviderError } from "./errors";
 import { HttpClient, type HttpClientOptions } from "./http";
@@ -73,7 +74,7 @@ export class FinnhubProvider implements NewsProvider, EarningsCalendarProvider {
   private readonly http: HttpClient;
 
   constructor(opts: Partial<HttpClientOptions> & { apiKey?: string } = {}) {
-    const apiKey = opts.apiKey ?? process.env.FINNHUB_API_KEY ?? "";
+    const apiKey = opts.apiKey ?? envSecret("FINNHUB_API_KEY");
     this.configured = apiKey.length > 0;
     this.http = new HttpClient({
       provider: this.id,

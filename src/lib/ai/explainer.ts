@@ -4,6 +4,7 @@
  *
  * Default model: Claude Haiku 4.5 (cheapest current model; override with AI_MODEL).
  */
+import { envSecret } from "../env";
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import type { z } from "zod";
@@ -50,7 +51,7 @@ export class AnthropicExplainer implements Explainer {
 
   constructor(opts: { apiKey?: string; model?: string; parse?: ParseFn; observer?: ProviderObserver } = {}) {
     this.model = opts.model ?? process.env.AI_MODEL ?? DEFAULT_AI_MODEL;
-    const apiKey = opts.apiKey ?? process.env.ANTHROPIC_API_KEY ?? "";
+    const apiKey = opts.apiKey ?? envSecret("ANTHROPIC_API_KEY");
     this.observer = opts.observer;
     if (opts.parse) {
       this.parse = opts.parse;

@@ -70,10 +70,12 @@ jobs:
       - run: npm ci
       - name: Require a persistent database
         run: |
-          case "$DATABASE_URL" in
-            postgres://*|postgresql://*) ;;
-            *) echo "::error::Set the DATABASE_URL repository secret to a hosted PostgreSQL URL (runners are ephemeral)."; exit 1 ;;
-          esac
+          if ! printf '%s' "$DATABASE_URL" | grep -Eq 'postgres(ql)?://'; then
+            echo "::error::The DATABASE_URL secret must contain your hosted PostgreSQL connection string (it starts with postgresql://)."; exit 1
+          fi
+          for v in SEC_USER_AGENT POLYGON_API_KEY; do
+            if [ -z "${!v}" ]; then echo "::warning::$v secret is empty or missing; related data will be unavailable."; fi
+          done
       - name: Apply migrations
         run: npm run db:migrate
       - name: Run jobs

@@ -3,6 +3,7 @@
  * Bitcoin reference price) and official release calendars (CPI, jobs, GDP, PPI).
  * https://fred.stlouisfed.org/docs/api/fred/
  */
+import { envSecret } from "../env";
 import { z } from "zod";
 import { ProviderError } from "./errors";
 import { HttpClient, type HttpClientOptions } from "./http";
@@ -24,7 +25,7 @@ export class FredProvider implements MacroDataProvider {
   private readonly http: HttpClient;
 
   constructor(opts: Partial<HttpClientOptions> & { apiKey?: string } = {}) {
-    const apiKey = opts.apiKey ?? process.env.FRED_API_KEY ?? "";
+    const apiKey = opts.apiKey ?? envSecret("FRED_API_KEY");
     this.configured = apiKey.length > 0;
     this.http = new HttpClient({
       provider: this.id,

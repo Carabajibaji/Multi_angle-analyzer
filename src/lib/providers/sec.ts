@@ -3,6 +3,7 @@
  * SEC fair-access policy: identify yourself via User-Agent and stay under 10 requests/second.
  * https://www.sec.gov/os/accessing-edgar-data
  */
+import { envSecret } from "../env";
 import { z } from "zod";
 import { ProviderError } from "./errors";
 import { HttpClient, type HttpClientOptions } from "./http";
@@ -74,7 +75,7 @@ export class SecEdgarProvider implements SecFilingsProvider, FundamentalsProvide
   private readonly http: HttpClient;
 
   constructor(opts: SecOptions = {}) {
-    const userAgent = opts.userAgent ?? process.env.SEC_USER_AGENT ?? "";
+    const userAgent = opts.userAgent ?? envSecret("SEC_USER_AGENT");
     // SEC requires a descriptive UA with contact email; refuse to run anonymously.
     this.configured = /\S+@\S+/.test(userAgent);
     this.http = new HttpClient({

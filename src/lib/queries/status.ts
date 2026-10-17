@@ -1,3 +1,4 @@
+import { envSecret } from "../env";
 import { desc, eq, gte, sql } from "drizzle-orm";
 import type { Db } from "../db/client";
 import { datasets, jobFailures, jobRuns, providerHealth, analysisReports } from "../db/schema";
@@ -45,7 +46,7 @@ export async function getStatus(db: Db, now: Date) {
     .limit(25);
   const [reconciliation] = await db.select().from(analysisReports).where(eq(analysisReports.reportType, "reconciliation")).orderBy(desc(analysisReports.createdAt)).limit(1);
   const ai = {
-    enabled: !!process.env.ANTHROPIC_API_KEY,
+    enabled: !!envSecret("ANTHROPIC_API_KEY"),
     model: process.env.AI_MODEL ?? DEFAULT_AI_MODEL,
     tokensToday: await tokensUsedToday(db, now),
     dailyBudget: dailyTokenBudget(),

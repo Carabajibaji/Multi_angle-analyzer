@@ -3,6 +3,7 @@
  * Free plans provide end-of-day data; paid plans provide 15-minute delayed or real-time data.
  * The label shown to users comes from POLYGON_DATA_NATURE, which must match your plan.
  */
+import { envSecret } from "../env";
 import { z } from "zod";
 import { toEt } from "../time/marketCalendar";
 import { ProviderError } from "./errors";
@@ -28,7 +29,7 @@ export class PolygonMarketDataProvider implements MarketDataProvider {
   private readonly http: HttpClient;
 
   constructor(opts: Partial<HttpClientOptions> & { apiKey?: string; dataNature?: DataNature } = {}) {
-    const apiKey = opts.apiKey ?? process.env.POLYGON_API_KEY ?? "";
+    const apiKey = opts.apiKey ?? envSecret("POLYGON_API_KEY");
     this.configured = apiKey.length > 0;
     this.candleNature = opts.dataNature ?? ((process.env.POLYGON_DATA_NATURE as DataNature | undefined) ?? "end_of_day");
     this.http = new HttpClient({

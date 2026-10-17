@@ -8,6 +8,7 @@
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
+import { cleanDatabaseUrl } from "../env";
 import * as schema from "./schema";
 
 export type Db = PgDatabase<PgQueryResultHKT, typeof schema>;
@@ -21,7 +22,8 @@ export interface DbHandle {
 
 const MIGRATIONS_FOLDER = path.join(process.cwd(), "drizzle");
 
-export async function createDb(url = process.env.DATABASE_URL ?? "pglite:./.data/pglite"): Promise<DbHandle> {
+export async function createDb(rawUrl = process.env.DATABASE_URL || "pglite:./.data/pglite"): Promise<DbHandle> {
+  const url = cleanDatabaseUrl(rawUrl);
   if (url.startsWith("postgres://") || url.startsWith("postgresql://")) {
     const { Pool } = await import("pg");
     const { drizzle } = await import("drizzle-orm/node-postgres");
