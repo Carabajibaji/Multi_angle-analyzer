@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanDatabaseUrl, cleanSecret } from "@/lib/env";
+import { cleanDatabaseUrl, cleanSecret, envSecret } from "@/lib/env";
 
 describe("pasted secret cleanup", () => {
   it("handles whitespace, quotes, NAME= prefixes and trailing lines", () => {
@@ -14,5 +14,16 @@ describe("pasted secret cleanup", () => {
     expect(cleanDatabaseUrl(`DATABASE_URL=${url}\n\n`)).toBe(url);
     expect(cleanDatabaseUrl(`# Neon\nDATABASE_URL="${url}"\n`)).toBe(url);
     expect(cleanDatabaseUrl("pglite:memory")).toBe("pglite:memory");
+  });
+});
+
+describe("secret name aliases", () => {
+  it("accepts FRED_KEY for FRED_API_KEY and prefers the exact name", () => {
+    process.env.FRED_KEY = " abc ";
+    expect(envSecret("FRED_API_KEY")).toBe("abc");
+    process.env.FRED_API_KEY = "exact";
+    expect(envSecret("FRED_API_KEY")).toBe("exact");
+    delete process.env.FRED_KEY;
+    delete process.env.FRED_API_KEY;
   });
 });

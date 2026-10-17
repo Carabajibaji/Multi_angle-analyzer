@@ -47,13 +47,13 @@ jobs:
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
-      POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
+      POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY || secrets.POLYGON_KEY }}
       POLYGON_DATA_NATURE: ${{ vars.POLYGON_DATA_NATURE || 'end_of_day' }}
       POLYGON_REQUESTS_PER_MINUTE: ${{ vars.POLYGON_REQUESTS_PER_MINUTE || '5' }}
-      FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
-      FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
+      FRED_API_KEY: ${{ secrets.FRED_API_KEY || secrets.FRED_KEY }}
+      FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY || secrets.FINNHUB_KEY }}
       # Optional: plain-English AI explanations (Claude Haiku 4.5 by default). Leave unset to disable.
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY || secrets.ANTHROPIC_KEY }}
       AI_MODEL: ${{ vars.AI_MODEL || 'claude-haiku-4-5' }}
       AI_DAILY_TOKEN_BUDGET: ${{ vars.AI_DAILY_TOKEN_BUDGET || '400000' }}
       AI_FILINGS_PER_NIGHT: ${{ vars.AI_FILINGS_PER_NIGHT || '5' }}

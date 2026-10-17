@@ -10,8 +10,19 @@ export function cleanSecret(raw: string | undefined | null, name?: string): stri
   return v.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)[0] ?? "";
 }
 
+/** Accepted alternative names (e.g. FRED_KEY for FRED_API_KEY), so small naming slips still work. */
+export function secretAliases(name: string): string[] {
+  const out = [name];
+  if (name.endsWith("_API_KEY")) out.push(name.replace(/_API_KEY$/, "_KEY"), name.replace(/_API_KEY$/, "_TOKEN"), name.replace(/_API_KEY$/, "_APIKEY"));
+  return out;
+}
+
 export function envSecret(name: string): string {
-  return cleanSecret(process.env[name], name);
+  for (const n of secretAliases(name)) {
+    const v = cleanSecret(process.env[n], n);
+    if (v) return v;
+  }
+  return "";
 }
 
 /**
