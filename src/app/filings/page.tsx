@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AnalysisView } from "@/components/AnalysisView";
+import { FilingSummaryView } from "@/components/FilingSummaryView";
+import { storedFilingSummary } from "@/lib/ai/filingSummary";
+import { SummaryButton } from "./SummaryButton";
 import { Unavailable } from "@/components/data";
 import { getDb } from "@/lib/db/client";
 import { analyzeStoredFiling } from "@/lib/filings/service";
@@ -31,6 +34,8 @@ export default async function FilingsPage({ searchParams }: { searchParams: Prom
       error = `Could not retrieve the filing from SEC EDGAR: ${redactSecrets(err instanceof Error ? err.message : String(err)).slice(0, 200)}`;
     }
   }
+  const aiSummary = analysis && accession ? await storedFilingSummary(db, accession).catch(() => null) : null;
+  const aiEnabled = createProviders().ai.configured;
   const sec = ticker ? await getSecurity(db, ticker) : null;
   const list = sec?.company ? await companyFilings(db, sec.company.id, { forms: ["10-K", "10-Q", "8-K", "DEF 14A", "10-K/A", "10-Q/A", "20-F", "6-K"], limit: 30 }) : [];
 
@@ -64,6 +69,8 @@ export default async function FilingsPage({ searchParams }: { searchParams: Prom
       ) : null}
 
       {error ? <div className="section"><Unavailable detail={error} /></div> : null}
+      {analysis && aiSummary ? <div className="section"><FilingSummaryView s={aiSummary} /></div> : null}
+      {analysis && !aiSummary && aiEnabled && accession ? <div className="section"><SummaryButton accession={accession} /></div> : null}
       {analysis ? <div className="section"><AnalysisView a={analysis} /></div> : null}
 
       <section className="section" aria-labelledby="paste">

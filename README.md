@@ -4,7 +4,7 @@ Beginner-friendly equity research. Its foundation is an **automated daily data p
 
 > Educational and informational purposes only. Not investment advice.
 
-**Status: Phases 2 (data foundation) and 3 (core product) complete.** Phase 4 (grounded AI explanations) is next. See [Roadmap](#roadmap).
+**Status: Phases 2–4 complete** (data foundation, core product, grounded AI explanations). See [Roadmap](#roadmap).
 
 | Today (demo data) | Technical analysis (demo data) |
 |---|---|
@@ -34,9 +34,20 @@ Beginner-friendly equity research. Its foundation is an **automated daily data p
   * reported facts vs management commentary
   * prior-period comparison: new flags and new or reworded risk-factor paragraphs
   * detection of instruction-like (prompt-injection) text, which is reported and never acted on
+* **AI explanations (optional; Claude Haiku 4.5 by default)**, all grounded in stored data:
+  * The daily brief on Today: what happened, possible drivers, a risk to watch, sector notes, and news grouped by topic (macro, Fed, earnings, regulation, geopolitics, sector), each with a plain-English "why it might matter" and a confidence level.
+  * Plain-English filing summaries: generated nightly for new 10-K/10-Q/earnings 8-Ks, or on request.
+
+  Safeguards:
+  * The model only receives rows already stored by the pipeline, each with a reference id, and every statement must cite those ids.
+  * Facts with missing or invented citations are removed automatically.
+  * Cause-and-effect claims are labelled "Interpretation" with a confidence level.
+  * Outputs are schema-validated and stored with the model, prompt version, input fingerprint and token usage. Identical inputs are never re-sent.
+  * A hard daily token budget caps cost. Demo prices are never narrated.
+  * If AI is off or fails, every factual page works unchanged.
 * **Compare**: up to 8 companies side by side. **Watchlist**: saved in the browser.
 * **Jargon Buster**: 30 glossary terms (plain definition, why it matters, example, limitation), opened inline from underlined terms anywhere, plus a full Learn page explaining the Fact / Calculation / Interpretation / Risk / Unknown labels.
-* **84 automated tests**: calendar/DST/holidays, indicators, fundamentals, health/moat/governance rules, W/M patterns, triple verification, HTTP retry/rate-limit/redaction, SEC parsing, filing analyzer (including injection and SSRF guards), and the full pipeline and on-demand analysis on an in-memory Postgres.
+* **93 automated tests**: calendar/DST/holidays, indicators, fundamentals, health/moat/governance rules, W/M patterns, triple verification, HTTP retry/rate-limit/redaction, SEC parsing, filing analyzer (including injection and SSRF guards), and the full pipeline and on-demand analysis on an in-memory Postgres.
 
 ## Quick start (local, no API keys)
 
@@ -58,7 +69,7 @@ Demo mode only synthesizes prices and macro series, and every value is stamped *
 | [Polygon.io / Massive](https://polygon.io) | daily OHLCV for ETFs and stocks | free tier = end-of-day, 5 req/min | `POLYGON_API_KEY`; set `POLYGON_DATA_NATURE` to match your plan (`end_of_day`, `delayed_15m`, `real_time`) |
 | [FRED](https://fred.stlouisfed.org/docs/api/api_key.html) | VIX, 10-yr yield, broad dollar index, WTI, Bitcoin; CPI/jobs/GDP/PPI release dates | free | `FRED_API_KEY` |
 | [Finnhub](https://finnhub.io) | market & company news, earnings calendar | free tier | `FINNHUB_API_KEY` |
-| Anthropic | AI explanations (Phase 4) | paid | `ANTHROPIC_API_KEY` (not used yet) |
+| [Anthropic](https://console.anthropic.com) | optional AI explanations (Claude Haiku 4.5) | pay per use, roughly $5–10/month for 20 companies | `ANTHROPIC_API_KEY`; optional `AI_MODEL`, `AI_DAILY_TOKEN_BUDGET` (default 400k tokens/day) |
 
 Every variable is listed in [`.env.example`](.env.example). Keys are read only on the server and are redacted from logs and stored URLs.
 
@@ -108,7 +119,7 @@ Any Node 20+ host works: `npm run build && npm start`.
 
 ## Tests
 
-`npm test` runs 84 tests with no network access. Pipeline tests use fake providers on an in-memory PostgreSQL (PGlite) and cover:
+`npm test` runs 93 tests with no network access. Pipeline tests use fake providers on an in-memory PostgreSQL (PGlite) and cover:
 * successful refresh, idempotency, no duplicates
 * partial failure and provider errors that keep existing data, labelled stale
 * empty-response protection, lock contention and lease takeover
@@ -134,7 +145,13 @@ Calculation tests use hand-computed fixtures.
 
 ## Roadmap
 
-* **Phase 4:** grounded AI explanations via the Anthropic API: a sourced "why it moved" layer for the Today page, filing summaries and news grouping. Each will be schema-validated, cached by input hash in `ai_summaries`, cite stored sources only, and wrap documents as untrusted data. Also: proxy-statement extraction for board and compensation data, and FOMC and other official calendars.
+* **Next:**
+  * Proxy-statement extraction for board, compensation and ownership data, plus Form 4 insider transactions.
+  * FOMC and other official calendars.
+  * Business descriptions and GICS sectors.
+  * PDF uploads.
+  * Batch API for overnight filing summaries (50% cheaper).
+  * Accessibility audit and browser tests.
 * **Phase 5:** accessibility audit (axe), Playwright UX tests, performance budgets, dependency review.
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the audit, design, schema and integrity rules, and [`docs/sample-refresh-log.txt`](docs/sample-refresh-log.txt) for a real job log.

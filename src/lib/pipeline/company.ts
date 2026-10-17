@@ -134,13 +134,14 @@ export async function linkTrackedCompanies(ctx: JobContext, tickerMap?: TickerMa
 
 export interface CompanyRefreshResult {
   newFilings: number;
+  newFilingRecords: Array<{ accessionNo: string; form: string; items: string[] }>;
   factsUpserted: number;
   statementsChanged: number;
   fundamentalsRefreshed: boolean;
 }
 
 export async function refreshCompany(ctx: JobContext, company: typeof companies.$inferSelect): Promise<CompanyRefreshResult> {
-  const result: CompanyRefreshResult = { newFilings: 0, factsUpserted: 0, statementsChanged: 0, fundamentalsRefreshed: false };
+  const result: CompanyRefreshResult = { newFilings: 0, newFilingRecords: [], factsUpserted: 0, statementsChanged: 0, fundamentalsRefreshed: false };
   if (!company.cik) return result;
   const filingsKey = `filings:${company.cik}`;
   await markAttempt(ctx.db, { key: filingsKey, kind: "filings", provider: "sec_edgar", dataNature: "filing", staleAfterSeconds: STALE_AFTER.filings }, ctx.now);
@@ -170,6 +171,7 @@ export async function refreshCompany(ctx: JobContext, company: typeof companies.
   );
   const fresh = relevant.filter((f) => !known.has(f.accessionNo));
   result.newFilings = fresh.length;
+  result.newFilingRecords = fresh.map((f) => ({ accessionNo: f.accessionNo, form: f.form, items: f.items }));
 
   await ctx.db.transaction(async (tx) => {
     await tx

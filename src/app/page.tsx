@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { AiBrief, GroupedNews } from "@/components/AiBrief";
+import { latestMarketBrief } from "@/lib/ai/marketBrief";
 import { Change, Disclosure, FreshnessBadge, fmtNum, fmtTime, NatureBadge, SourceLine, Unavailable } from "@/components/data";
 import { getDb } from "@/lib/db/client";
 import { datasetFreshness, fmtPct, getLatestNews, getSectorPulse, getSnapshotCards, getStocksToWatch, getUpcomingEvents, sixtySecondSummary } from "@/lib/queries/dashboard";
@@ -11,15 +13,16 @@ export default async function TodayPage() {
   let data;
   try {
     const { db } = await getDb();
-    const [cards, pulse, watch, events, news, fresh] = await Promise.all([
+    const [cards, pulse, watch, events, news, fresh, brief] = await Promise.all([
       getSnapshotCards(db, now),
       getSectorPulse(db),
       getStocksToWatch(db),
       getUpcomingEvents(db, now),
       getLatestNews(db, 15),
       datasetFreshness(db, ["indicators:SPY", "events:earnings", "events:macro", "news:market"], now),
+      latestMarketBrief(db).catch(() => null),
     ]);
-    data = { cards, pulse, watch, events, news, fresh };
+    data = { cards, pulse, watch, events, news, fresh, brief };
   } catch (err) {
     console.error("Today page: database unavailable", err instanceof Error ? err.message : err);
     return (
@@ -29,10 +32,12 @@ export default async function TodayPage() {
       </>
     );
   }
-  const { cards, pulse, watch, events, news, fresh } = data;
+  const { cards, pulse, watch, events, news, fresh, brief } = data;
   const status = marketStatus(now);
   const anyDemo = cards.some((c) => c.isDemo);
   const summary = sixtySecondSummary({ cards, pulse, events });
+  const newsIds = new Set(news.map((n) => `N${n.id}`));
+  const groupedNews = !!brief?.output.newsGroups.some((g) => g.items.some((i) => newsIds.has(i.ref)));
 
   return (
     <>
@@ -62,6 +67,8 @@ export default async function TodayPage() {
         )}
         <Disclosure>This summary states measurements only. It does not claim why markets moved.</Disclosure>
       </section>
+
+      {brief ? <div className="section"><AiBrief s={brief} /></div> : null}
 
       <section className="section" aria-labelledby="snapshot">
         <div className="section-head">
@@ -122,7 +129,7 @@ export default async function TodayPage() {
                 );
               })}
             </div>
-            <Disclosure>{pulse.method} Explanations of possible drivers will be added with sourced evidence in a later phase.</Disclosure>
+            <Disclosure>{pulse.method} Possible drivers, when the data supports any, appear in the AI explanation above with their cited sources.</Disclosure>
           </div>
         ) : (
           <Unavailable />
@@ -188,7 +195,9 @@ export default async function TodayPage() {
           <h2 id="news">Market news</h2>
           <FreshnessBadge freshness={fresh.get("news:market")!} />
         </div>
-        {news.length ? (
+        {groupedNews ? (
+          <GroupedNews s={brief!} news={news} />
+        ) : news.length ? (
           <ul className="plain">
             {news.map((n) => (
               <li key={n.id}>
@@ -206,7 +215,7 @@ export default async function TodayPage() {
         ) : (
           <Unavailable />
         )}
-        <Disclosure>Headlines and summaries are shown as supplied by the news provider. Grouping and plain-English explanations come in a later phase.</Disclosure>
+        <Disclosure>Headlines and links come from the news provider. Groupings and “why it might matter” notes are AI interpretations of those headlines and can be wrong.</Disclosure>
       </section>
     </>
   );

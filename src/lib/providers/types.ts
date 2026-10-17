@@ -176,26 +176,4 @@ export interface EarningsCalendarProvider extends ProviderInfo {
   getEarningsCalendar(from: IsoDate, to: IsoDate): Promise<Fetched<EarningsEvent[]>>;
 }
 
-/** Contract for grounded AI explanations (implemented in the explanation-layer phase). */
-export interface AIExplanationRequest<TInput> {
-  subjectType: string;
-  subjectKey: string;
-  promptName: string;
-  input: TInput;
-  /** Ids of stored sources the input was built from; the model may only cite these. */
-  sourceRefs: Array<{ sourceId: number; label: string; url: string | null }>;
-}
-
-export interface AIExplanationResult<TOutput> {
-  model: string;
-  promptVersion: number;
-  output: TOutput;
-  generatedAt: Date;
-}
-
-export interface AIExplanationProvider extends ProviderInfo {
-  explain<TInput, TOutput>(
-    req: AIExplanationRequest<TInput>,
-    validate: (raw: unknown) => TOutput,
-  ): Promise<AIExplanationResult<TOutput>>;
-}
+// AI explanations: see src/lib/ai/explainer.ts (Explainer interface).

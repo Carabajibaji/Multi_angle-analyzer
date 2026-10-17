@@ -110,3 +110,19 @@ GitHub Actions cron (UTC, 2 slots per job)            Admin "Refresh" button / e
 | Glossary | `content/glossary.ts`, `components/Term.tsx` | keyboard-accessible popover, Esc/outside click closes |
 
 **Prompt-injection posture.** Documents are only ever parsed by regular expressions. Instruction-like phrases are detected and shown to the user as a warning. When the AI layer is added, document text will be passed inside a delimited, explicitly untrusted data block, with no tool access.
+
+## 9. AI explanation layer (Phase 4)
+
+Claude is used only to **restate and organize stored data** in plain English, never as a source of facts.
+
+| Step | Code | Guarantee |
+|---|---|---|
+| Input | `ai/marketBrief.ts`, `ai/filingSummary.ts` | Built only from DB rows; each item gets a reference id (D#, E<id>, N<id>, P#); size-bounded |
+| Prompt | `ai/prompts.ts` (versioned) | Rules: cite ids, label interpretation vs fact, no buy/sell or predictions, `<data>` treated as untrusted text |
+| Call | `ai/explainer.ts` | Claude Haiku 4.5 (`AI_MODEL`), structured output via `messages.parse` + zod, re-validated; refusal / max_tokens / bad shape → error |
+| Check | `ai/service.ts#enforceCitations` | Unknown reference ids are removed; "fact" items without a valid citation are dropped; evidence status records how many |
+| Store | `ai_summaries` | model, prompt version, input fingerprint, input ids, cited sources, token usage; unique per input → no duplicate spend |
+| Budget | `AI_DAILY_TOKEN_BUDGET` | Generation stops for the day once reached; the last stored brief stays visible |
+| Failure | jobs + pages | Not configured → logged and skipped; failure → item failure only; factual pages never depend on AI |
+
+Demo-mode prices are never summarized by AI.

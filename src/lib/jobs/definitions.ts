@@ -12,12 +12,32 @@ import { evaluateFreshness } from "../pipeline/freshness";
 import { linkTrackedCompanies, refreshCompany, syncCompanyTracking, syncTickerDirectory } from "../pipeline/company";
 import { pruneNews, refreshCompanyNews, refreshEarningsCalendar, refreshMacroCalendar, refreshMarketNews } from "../pipeline/events";
 import { computeSectorPulse, ensureUniverse, refreshCandles, refreshIndicators, refreshSnapshots } from "../pipeline/market";
+import { generateFilingSummary } from "../ai/filingSummary";
+import { generateMarketBrief } from "../ai/marketBrief";
+import { analyzeStoredFiling } from "../filings/service";
 import { buildStocksToWatch } from "../pipeline/watchlist";
 import { getDataset, recordSource } from "../pipeline/store";
 import { addDays, closeMinutes, isTradingDay, isoWeekKey, lastCompletedSession, previousTradingDay, toEt } from "../time/marketCalendar";
 import type { JobContext, JobDefinition, JobName } from "./runner";
 
 const HOUR = 3_600_000;
+
+/** AI is optional: when it isn't configured we log and move on; real failures are recorded. */
+async function aiMarketBrief(ctx: JobContext) {
+  if (!ctx.providers.ai.configured) {
+    ctx.log("AI market brief skipped: ANTHROPIC_API_KEY not set (factual data unaffected).");
+    return;
+  }
+  await ctx.item("ai:market-brief", async () => {
+    const r = await generateMarketBrief(ctx.db, ctx.providers.ai, ctx.now);
+    if ("skipped" in r) ctx.log(`AI market brief skipped: ${r.skipped}.`);
+    else {
+      ctx.log(`AI market brief ${r.summary.cached ? "unchanged (inputs identical, no API call)" : `generated with ${r.summary.model}`}.`);
+      if (r.summary.cached) ctx.skip();
+      else ctx.ok();
+    }
+  });
+}
 
 export const preMarketJob: JobDefinition = {
   name: "pre-market",
@@ -44,6 +64,7 @@ export const preMarketJob: JobDefinition = {
     await refreshMacroCalendar(ctx);
     await ctx.item("news:market", () => refreshMarketNews(ctx));
     for (const t of tracked) await ctx.item(`news:${t}`, () => refreshCompanyNews(ctx, t));
+    await aiMarketBrief(ctx);
     return { previousSession: prevSession, etfs: etfTickers.size, trackedCompanies: tracked.length };
   },
 };
@@ -76,6 +97,7 @@ export const postMarketJob: JobDefinition = {
     }
     const pulse = await ctx.item("sector-pulse", () => computeSectorPulse(ctx));
     const watch = await ctx.item("stocks-to-watch", () => buildStocksToWatch(ctx, session));
+    await aiMarketBrief(ctx);
     return { session, securities: all.length, newCandles: added, indicatorsRecalculated: recalculated, sectors: pulse?.length ?? 0, stocksToWatch: watch ?? 0 };
   },
 };
@@ -106,6 +128,7 @@ export const nightlyCompanyJob: JobDefinition = {
     const list = await ctx.db.select().from(companies).where(and(eq(companies.tracked, true), isNotNull(companies.cik)));
     let newFilings = 0;
     let refreshed = 0;
+    const toSummarize: string[] = [];
     for (const c of list) {
       const r = await ctx.item(`company:${c.cik}`, async () => {
         const res = await refreshCompany(ctx, c);
@@ -114,8 +137,26 @@ export const nightlyCompanyJob: JobDefinition = {
       });
       newFilings += r?.newFilings ?? 0;
       if (r?.fundamentalsRefreshed) refreshed++;
+      for (const f of r?.newFilingRecords ?? []) {
+        if (/^(10-K|10-Q|20-F|40-F)$/.test(f.form) || (f.form === "8-K" && f.items.includes("2.02"))) toSummarize.push(f.accessionNo);
+      }
     }
-    return { companies: list.length, newlyLinked: linked ?? 0, newFilings, fundamentalsRefreshed: refreshed };
+    // Plain-English summaries for important new filings (bounded per night to control cost).
+    const cap = Number(process.env.AI_FILINGS_PER_NIGHT ?? 5);
+    let summarized = 0;
+    if (ctx.providers.ai.configured) {
+      for (const acc of toSummarize.slice(0, cap)) {
+        await ctx.item(`ai:filing:${acc}`, async () => {
+          const analysis = await analyzeStoredFiling(ctx.db, ctx.providers.sec, acc);
+          if (!analysis) return;
+          await generateFilingSummary(ctx.db, ctx.providers.ai, analysis, ctx.now);
+          summarized++;
+          ctx.ok();
+        });
+      }
+      if (toSummarize.length > cap) ctx.log(`${toSummarize.length - cap} new filing(s) not summarized tonight (AI_FILINGS_PER_NIGHT=${cap}); they can be summarized on demand.`);
+    } else if (toSummarize.length) ctx.log(`AI filing summaries skipped: ANTHROPIC_API_KEY not set.`);
+    return { companies: list.length, newlyLinked: linked ?? 0, newFilings, fundamentalsRefreshed: refreshed, filingSummaries: summarized };
   },
 };
 

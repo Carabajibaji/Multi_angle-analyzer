@@ -1,3 +1,4 @@
+import type { ExplainRequest, ExplainResult, Explainer } from "@/lib/ai/explainer";
 import { createDb, type DbHandle } from "@/lib/db/client";
 import { DemoMacroProvider } from "@/lib/providers/demo";
 import { ProviderError } from "@/lib/providers/errors";
@@ -116,10 +117,26 @@ export class FakeNews {
   }
 }
 
+/** Fake Claude: returns `respond(req)` and records calls. Unconfigured unless `configured` is set. */
+export class FakeExplainer implements Explainer {
+  readonly id = "anthropic";
+  readonly model = "claude-haiku-4-5";
+  configured = false;
+  calls: Array<ExplainRequest<unknown>> = [];
+  respond: (req: ExplainRequest<unknown>) => unknown = () => ({});
+  fail: Error | null = null;
+  async explain<T>(req: ExplainRequest<T>): Promise<ExplainResult<T>> {
+    this.calls.push(req as ExplainRequest<unknown>);
+    if (this.fail) throw this.fail;
+    return { output: req.schema.parse(this.respond(req as ExplainRequest<unknown>)), model: this.model, inputTokens: 1000, outputTokens: 200 };
+  }
+}
+
 export function fakeProviders() {
   const market = new FakeMarket();
   const sec = new FakeSec();
   const news = new FakeNews();
-  const providers: Providers = { market, macro: new DemoMacroProvider(), sec, fundamentals: sec, news, earnings: news };
-  return { providers, market, sec, news };
+  const ai = new FakeExplainer();
+  const providers: Providers = { market, macro: new DemoMacroProvider(), sec, fundamentals: sec, news, earnings: news, ai };
+  return { providers, market, sec, news, ai };
 }

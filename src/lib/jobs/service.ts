@@ -27,6 +27,7 @@ function providersFor(opts: ServiceOptions, health: HealthTracker) {
   for (const p of [providers.market, providers.macro, providers.sec, providers.news]) {
     if (!p.configured) health.notConfigured(p.id, `${p.displayName} is not configured (missing environment variable).`);
   }
+  if (!providers.ai.configured) health.notConfigured(providers.ai.id, "AI explanations are off (ANTHROPIC_API_KEY not set). Factual data is unaffected.");
   return providers;
 }
 

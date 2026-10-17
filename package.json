@@ -21,6 +21,7 @@
     "seed:demo": "tsx scripts/run-job.ts all --force --demo"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.135.0",
     "@electric-sql/pglite": "^0.5.8",
     "drizzle-orm": "^0.45.3",
     "lightweight-charts": "^5.2.1",

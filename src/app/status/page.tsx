@@ -33,6 +33,10 @@ export default async function StatusPage() {
         <div className="card"><div className="value">{s.counts.stale}</div><div className="small muted">stale datasets (showing last verified data)</div></div>
         <div className="card"><div className="value">{s.counts.failed}</div><div className="small muted">never loaded / failed</div></div>
         <div className="card"><div className="value">{s.counts.failedRecords7d}</div><div className="small muted">failed records, last 7 days</div></div>
+        <div className="card">
+          <div className="value">{s.ai.enabled ? `${Math.round((s.ai.tokensToday / Math.max(1, s.ai.dailyBudget)) * 100)}%` : "Off"}</div>
+          <div className="small muted">{s.ai.enabled ? `AI budget used today: ${s.ai.tokensToday.toLocaleString("en-US")} of ${s.ai.dailyBudget.toLocaleString("en-US")} tokens (${s.ai.model})` : "AI explanations off (no ANTHROPIC_API_KEY)"}</div>
+        </div>
       </div>
 
       <section className="section card" aria-labelledby="jobs">

@@ -52,13 +52,18 @@ jobs:
       POLYGON_REQUESTS_PER_MINUTE: ${{ vars.POLYGON_REQUESTS_PER_MINUTE || '5' }}
       FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
       FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
+      # Optional: plain-English AI explanations (Claude Haiku 4.5 by default). Leave unset to disable.
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      AI_MODEL: ${{ vars.AI_MODEL || 'claude-haiku-4-5' }}
+      AI_DAILY_TOKEN_BUDGET: ${{ vars.AI_DAILY_TOKEN_BUDGET || '400000' }}
+      AI_FILINGS_PER_NIGHT: ${{ vars.AI_FILINGS_PER_NIGHT || '5' }}
       TRACKED_TICKERS: ${{ vars.TRACKED_TICKERS }}
       MARKET_EXTRA_CLOSURES: ${{ vars.MARKET_EXTRA_CLOSURES }}
       CANDLE_HISTORY_YEARS: ${{ vars.CANDLE_HISTORY_YEARS || '5' }}
       DATA_MODE: live
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -75,7 +80,7 @@ jobs:
         run: npm run job -- "${{ inputs.job || 'scheduled' }}" ${{ inputs.force && '--force' || '' }} --trigger=${{ github.event_name == 'schedule' && 'schedule' || 'manual' }}
       - name: Upload job logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: job-logs-${{ github.run_id }}
           path: job-logs/

@@ -527,9 +527,14 @@ export const aiSummaries = pgTable(
     output: jsonb("output").notNull(),
     outputVersion: integer("output_version").notNull(),
     evidenceStatus: text("evidence_status"),
+    inputTokens: integer("input_tokens"),
+    outputTokens: integer("output_tokens"),
     generatedAt: ts("generated_at").notNull().defaultNow(),
   },
-  (t) => [unique("ai_summaries_identity").on(t.subjectType, t.subjectKey, t.promptVersionId, t.inputHash)],
+  (t) => [
+    unique("ai_summaries_identity").on(t.subjectType, t.subjectKey, t.promptVersionId, t.inputHash),
+    index("ai_summaries_subject_idx").on(t.subjectType, t.subjectKey, t.generatedAt),
+  ],
 );
 
 /* ------------------------------------------------------------------ */

@@ -2,6 +2,7 @@
  * Provider selection. Swap vendors by adding an adapter that implements the interface in `types.ts`
  * and selecting it here via environment variables.
  */
+import { AnthropicExplainer, type Explainer } from "../ai/explainer";
 import { DemoMacroProvider, DemoMarketDataProvider } from "./demo";
 import { FinnhubProvider } from "./finnhub";
 import { FredProvider } from "./fred";
@@ -24,6 +25,8 @@ export interface Providers {
   fundamentals: FundamentalsProvider;
   news: NewsProvider;
   earnings: EarningsCalendarProvider;
+  /** Optional: plain-English explanations. Unconfigured = factual pages still work. */
+  ai: Explainer;
 }
 
 export type DataMode = "live" | "demo";
@@ -44,5 +47,6 @@ export function createProviders(opts: { mode?: DataMode; observer?: ProviderObse
     fundamentals: sec,
     news: finnhub,
     earnings: finnhub,
+    ai: new AnthropicExplainer({ observer: opts.observer }),
   };
 }

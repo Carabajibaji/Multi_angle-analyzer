@@ -3,6 +3,8 @@ import type { Db } from "../db/client";
 import { datasets, jobFailures, jobRuns, providerHealth, analysisReports } from "../db/schema";
 import { JOBS, JOB_SCHEDULE_DESCRIPTION, nextCronFire, type ScheduledJobName } from "../jobs/definitions";
 import { evaluateFreshness } from "../pipeline/freshness";
+import { DEFAULT_AI_MODEL } from "../ai/explainer";
+import { dailyTokenBudget, tokensUsedToday } from "../ai/service";
 
 export async function getStatus(db: Db, now: Date) {
   const jobNames = Object.keys(JOBS) as ScheduledJobName[];
@@ -42,7 +44,14 @@ export async function getStatus(db: Db, now: Date) {
     .orderBy(desc(jobRuns.startedAt))
     .limit(25);
   const [reconciliation] = await db.select().from(analysisReports).where(eq(analysisReports.reportType, "reconciliation")).orderBy(desc(analysisReports.createdAt)).limit(1);
+  const ai = {
+    enabled: !!process.env.ANTHROPIC_API_KEY,
+    model: process.env.AI_MODEL ?? DEFAULT_AI_MODEL,
+    tokensToday: await tokensUsedToday(db, now),
+    dailyBudget: dailyTokenBudget(),
+  };
   return {
+    ai,
     generatedAt: now.toISOString(),
     jobs,
     providers,
