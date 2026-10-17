@@ -4,7 +4,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import type { Db } from "../db/client";
 import { datasets, providerHealth, sources } from "../db/schema";
-import { ProviderError, redactSecrets } from "../providers/errors";
+import { describeError, ProviderError, redactSecrets } from "../providers/errors";
 import type { ProviderObserver } from "../providers/http";
 import type { DataNature, SourceMeta } from "../providers/types";
 
@@ -84,7 +84,7 @@ export async function markSuccess(
  * labelled stale by `evaluateFreshness` once they age out.
  */
 export async function markFailure(db: Db, key: string, error: unknown): Promise<void> {
-  const message = redactSecrets(error instanceof Error ? error.message : String(error)).slice(0, 1000);
+  const message = redactSecrets(describeError(error)).slice(0, 1000);
   await db
     .update(datasets)
     .set({

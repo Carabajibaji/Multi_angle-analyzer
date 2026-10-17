@@ -76,12 +76,15 @@ export async function refreshCandles(
     }
 
     const res = await market.getDailyCandles(sec.ticker, from, to);
-    const valid: Candle[] = [];
-    for (const c of res.data) {
+    // Normalize: split-adjusted volumes can be fractional (column is an integer); one row per date.
+    const byDate = new Map<string, Candle>();
+    for (const raw of res.data) {
+      const c = { ...raw, volume: raw.volume == null ? null : Math.round(raw.volume) };
       const problem = validateCandle(c);
       if (problem) ctx.log(`Dropped invalid candle ${sec.ticker} ${c.date}: ${problem}`);
-      else if (c.date <= to) valid.push(c);
+      else if (c.date <= to) byDate.set(c.date, c);
     }
+    const valid: Candle[] = [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
     const expectsNew = opts.from ? false : hasTradingDayBetween(lastDate ? addDays(lastDate, 1) : from, to);
     if (valid.length === 0 && expectsNew) {
       throw new ProviderError(market.id, "empty", `No valid candles returned for ${sec.ticker} ${from}..${to}; keeping existing data.`);

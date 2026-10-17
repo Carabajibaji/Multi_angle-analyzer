@@ -11,7 +11,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq, lt } from "drizzle-orm";
 import type { Db } from "../db/client";
 import { jobFailures, jobLocks, jobRuns } from "../db/schema";
-import { ProviderError, redactSecrets, toProviderError } from "../providers/errors";
+import { describeError, ProviderError, redactSecrets, toProviderError } from "../providers/errors";
 import type { Providers } from "../providers/registry";
 import { HealthTracker } from "../pipeline/store";
 
@@ -181,7 +181,7 @@ export async function runJob(def: JobDefinition, opts: RunOptions): Promise<JobR
     status = itemsFailed === 0 ? "succeeded" : itemsOk > 0 ? "partial" : "failed";
   } catch (err) {
     status = "failed";
-    error = redactSecrets(err instanceof Error ? `${err.name}: ${err.message}` : String(err));
+    error = redactSecrets(err instanceof Error ? `${err.name}: ${describeError(err)}` : String(err));
     log(`Job aborted: ${error}`);
   }
   log(`Finished with status ${status}: ${itemsOk} ok, ${itemsFailed} failed, ${itemsSkipped} unchanged/skipped.`);

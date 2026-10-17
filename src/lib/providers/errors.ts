@@ -72,6 +72,19 @@ export const SECRET_ENV_VARS = [
 
 export function toProviderError(provider: string, err: unknown): ProviderError {
   if (err instanceof ProviderError) return err;
-  const message = err instanceof Error ? err.message : String(err);
-  return new ProviderError(provider, "client", message, { cause: err });
+  return new ProviderError(provider, "client", describeError(err), { cause: err });
+}
+
+/**
+ * Human-useful error text. Database errors wrap the real reason in `cause` and put a huge SQL
+ * statement in `message`; show the reason (and only the start of the query).
+ */
+export function describeError(err: unknown): string {
+  if (!(err instanceof Error)) return String(err);
+  const cause = (err as { cause?: unknown }).cause;
+  if (err.message.startsWith("Failed query") && cause instanceof Error) {
+    const detail = (cause as { detail?: string }).detail;
+    return `Database error: ${cause.message}${detail ? ` (${detail})` : ""} — in: ${err.message.slice(13, 90)}…`;
+  }
+  return err.message;
 }

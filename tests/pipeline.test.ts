@@ -118,6 +118,29 @@ describe("post-market job", () => {
   });
 });
 
+describe("provider quirks", () => {
+  it("stores split-adjusted fractional volumes and ignores duplicate dates", async () => {
+    const { providers, market } = fakeProviders();
+    const orig = market.getDailyCandles.bind(market);
+    market.getDailyCandles = async (t, f, to) => {
+      const r = await orig(t, f, to);
+      const data = r.data.map((c) => ({ ...c, volume: (c.volume ?? 0) + 0.5 }));
+      return { ...r, data: [...data, data.at(-1)!] };
+    };
+    const r = await runJob(JOBS["post-market"], { db: h.db, providers, now: FRIDAY_AFTER_CLOSE, trigger: "schedule" });
+    expect(r.status).toBe("succeeded");
+    const [row] = await h.db.select().from(priceCandles).limit(1);
+    expect(Number.isInteger(row!.volume)).toBe(true);
+  });
+
+  it("reports the real database reason instead of the SQL text", async () => {
+    const { describeError } = await import("@/lib/providers/errors");
+    const cause = Object.assign(new Error('invalid input syntax for type bigint: "1.5"'), { detail: undefined });
+    const err = Object.assign(new Error('Failed query: insert into "price_candles" (...) values ($1, $2)'), { cause });
+    expect(describeError(err)).toMatch(/^Database error: invalid input syntax for type bigint/);
+  });
+});
+
 describe("schedule gating (America/New_York)", () => {
   it("skips weekends and holidays", async () => {
     const { providers } = fakeProviders();
